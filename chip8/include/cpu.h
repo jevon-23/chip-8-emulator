@@ -25,7 +25,8 @@ typedef struct cpu {
 cpu makeCpu(mem *memory, display *screen);
 void runCpu(cpu *core);
 unsigned char *fetchInstruction(cpu *core);
-void clearScreen(cpu *core);
+void execute(cpu *core, instruction command);
+void clearScreen(cpu *core, instruction command);
 void jump(cpu *core, instruction command);
 void subRoutinePush(cpu *core, instruction command);
 void subRoutinePop(cpu *core, instruction command);

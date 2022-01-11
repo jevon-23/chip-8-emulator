@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <SDL.h>
 
 // variable registers
 unsigned char V0 = 0;
@@ -29,6 +30,8 @@ unsigned char VD = 0;
 unsigned char VE = 0;
 unsigned char VF = 0;
 
+instruction decodeInstruction(unsigned char *inst);
+
 cpu makeCpu(mem *memory, display *screen) {
   cpu out;
   out.indexRegister = (unsigned char *)malloc(sizeof(unsigned char) * 16);
@@ -45,36 +48,248 @@ cpu makeCpu(mem *memory, display *screen) {
   return out;
 }
 
-unsigned char *fetchInstruction(cpu *core) {
-  unsigned char *out = (unsigned char *)malloc(sizeof(unsigned char) * 2);
-  memmove(out, (core->PC), 2);
-  core->PC += 2;
-  return out;
+instruction runThread(cpu *core, time_t clock, const int maxInstructionsPerMin,
+               int *numInstructions) {
+
+  if (*numInstructions == maxInstructionsPerMin) {
+    waitSec(clock);
+    numInstructions = 0;
+    time(&clock);
+  }
+  unsigned char *command = fetchInstruction(core);
+  if (*command == 0x0 && *(command + 1) == 0x0) {
+    printf("finished program pt2!\n");
+    unsigned char *noop = (unsigned char *) malloc(sizeof(char) * 2);
+    *noop = 0xff;
+    *(noop + 1) = 0xff;
+    return makeInstruction(noop);
+  }
+  instruction decoded = decodeInstruction(command);
+  printf("decoded.type = %x ~ .x = %x ~ .y = %x ~ .n = %x \n", decoded.type,
+         decoded.x, decoded.y, decoded.n);
+  execute(core, decoded);
+  for (int i = 0; i < numDisplayRows; i++) {
+    for (int j = 0; j < numDisplayCols; j++) {
+      printf("%d ", *(*(core->screen->visual + i) + j));
+    }
+    printf("\n");
+  }
+  numInstructions++;
+  printf("made it inside of loop for checking, about to break! \n");
+  printf("core->PC = %x\n", *(core->PC));
+  return decoded;
 }
 
-instruction decode(unsigned char *inst) { return makeInstruction(inst); }
+void updateVisual(cpu *core, SDL_Window *window, SDL_Renderer *renderer ) {
+    for (int i = 0; i < numDisplayRows; i++) {
+        for (int j = 0; j < numDisplayCols; j++) {
+            if (*(*((*core).screen->visual + i) + j)) {
+                SDL_SetRenderDrawColor(renderer, 255, 255, 255, SDL_ALPHA_OPAQUE);
+            } else {
+                SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+            }
+                SDL_RenderDrawPoint(renderer, i, j);
+        }
+    }
+    SDL_RenderPresent(renderer);
+}
 
 void runCpu(cpu *core) {
+  time_t clock;
+  time(&clock);
+
   const int maxInstructionsPerMin = 700;
   int numInstructions = 0;
 
-  while (true) {
-    printf("made it inside of loop for checking, about to break!\n");
-    break;
-    if (numInstructions == maxInstructionsPerMin) {
-      // waitMin()
-      numInstructions = 0;
+  SDL_Event e;
+  bool quit = false;
+  SDL_Init(SDL_INIT_VIDEO);
+
+  SDL_Window *window =
+      SDL_CreateWindow("chip8", SDL_WINDOWPOS_UNDEFINED,
+                       SDL_WINDOWPOS_UNDEFINED, 32 * 5, 64 * 5, 0); // (640, 480)
+
+  SDL_Renderer *renderer =
+      SDL_CreateRenderer(window, -1, SDL_RENDERER_SOFTWARE);
+  SDL_SetRenderDrawColor(renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+  SDL_RenderClear(renderer);
+  SDL_RenderPresent(renderer);
+
+  while (!quit) {
+    
+    instruction currInstruction = runThread(core, clock, maxInstructionsPerMin, &numInstructions);
+    if (currInstruction.type == 0xd) {
+        updateVisual(core, window, renderer);
     }
-    // char *instruction = fetechInstruction();
-    // char *decoded = decodeInstruction(instruction);
-    // execute(decoded);
-    numInstructions++;
+    while (SDL_PollEvent(&e)) {
+      printf("inside of loop wtf\n");
+      if (e.type == SDL_QUIT) {
+        quit = true;
+      }
+      if (e.type == SDL_KEYDOWN) {
+        quit = true;
+      }
+      if (e.type == SDL_MOUSEBUTTONDOWN) {
+        quit = true;
+      }
+    }
+  }
+  SDL_DestroyWindow(window);
+  SDL_Quit();
+}
+
+unsigned char *fetchInstruction(cpu *core) {
+  unsigned char *out = (unsigned char *)malloc(sizeof(unsigned char) * 2);
+  if (*(core->PC) == '\0' && *(core->PC + 1) == '\0') {
+    printf("program is finished!\n");
+    unsigned char nop[2] = {0x00, 0x00};
+    memmove(out, nop, 2);
+  } else {
+    memmove(out, (core->PC), 2);
+    (*core).PC += 2;
+    printf("*(core->PC = %x)\n", *(core->PC));
+  }
+  return out;
+}
+
+instruction decodeInstruction(unsigned char *inst) {
+  return makeInstruction(inst);
+}
+
+void execute(cpu *core, instruction command) {
+  printf("command.x = %x\n", command.x);
+  switch (command.type) { // switch on 1st nibble
+  case 0x0:
+    switch (command.n) { // switch on 4th nibble
+    case 0x0:
+      clearScreen(core, command);
+      return;
+    case 0xE:
+      subRoutinePop(core, command);
+      return;
+    default:
+      printf("invalid instruction in execute\n");
+      exit(-1);
+    }
+  case 0x1:
+    jump(core, command);
+    return;
+  case 0x2:
+    subRoutinePush(core, command);
+    return;
+  case 0x3:
+    skip(core, command);
+    return;
+  case 0x4:
+    skip(core, command);
+    return;
+  case 0x5:
+    skip(core, command);
+    return;
+  case 0x9:
+    skip(core, command);
+    return;
+  case 0x6:
+    setImmediate(core, command);
+    return;
+  case 0x7:
+    addImmediate(core, command);
+    return;
+  case 0x8:
+    switch (command.n) {
+    case 0x0:
+      setReg(core, command);
+      return;
+    case 0x1:
+      binOr(core, command);
+      return;
+    case 0x2:
+      binAnd(core, command);
+      return;
+    case 0x3:
+      binXor(core, command);
+      return;
+    case 0x4:
+      addReg(core, command);
+      return;
+    case 0x5:
+      subReg(core, command, true);
+      return;
+    case 0x6:
+      shift(core, command, false);
+    case 0x7:
+      subReg(core, command, false);
+      return;
+    case 0xE:
+      shift(core, command, true);
+      return;
+    default:
+      printf("invalid instruction in execute\n");
+      exit(-1);
+    }
+  case 0xA:
+    setIndexRegister(core, command);
+    return;
+  case 0xB:
+    jumpW_offset(core, command);
+    return;
+  case 0xC:
+    randNN(core, command);
+    return;
+  case 0xD:
+    updateDisplay(core, command);
+    return;
+  case 0xE:
+    switch (command.n) {
+    case 0x1:
+      skipIfPressed(core, command, true, false);
+      return;
+    case 0xE:
+      skipIfPressed(core, command, false, false);
+      return;
+    default:
+      printf("invalid instruction in execute\n");
+      exit(-1);
+    }
+  case 0xF:
+    switch (command.n) {
+    case 0x3:
+      binCodedDecConversion(core, command);
+      return;
+    case 0x5:
+      switch (command.y) {
+      case 0x1:
+        setDelayTimer2Vx(core, command);
+        return;
+      case 0x5:
+        store(core, command);
+        return;
+      case 0x6:
+        load(core, command);
+        return;
+      }
+    case 0x7:
+      setVx2DelayTimer(core, command);
+      return;
+    case 0x8:
+      setSoundTimer2Vx(core, command);
+      return;
+    case 0x9:
+      fontChar(core, command);
+      return;
+    case 0xA:
+      getKey(core, command, false);
+      return;
+    case 0xE:
+      add2Index(core, command);
+      return;
+    }
   }
 }
 
 // instruction set
 
-void clearScreen(cpu *core) { // 00E0
+void clearScreen(cpu *core, instruction command) { // 00E0
   for (int i = 0; i < numDisplayRows; i++) {
     for (int j = 0; j < numDisplayCols; j++) {
       *((*((core->screen)->visual) + i) + j) = false;
@@ -165,15 +380,20 @@ void VXcmpVY(cpu *core, instruction command, bool not ) {
 }
 
 void skip(cpu *core, instruction command) { // 3XNN, 4XNN, 5XY0, 9XY0
-  if (command.type == 0x3) {
+  switch (command.type) {
+  case 0x3:
     VXcmpNN(core, command, false);
-  } else if (command.type == 0x4) {
+    return;
+  case 0x4:
     VXcmpNN(core, command, true);
-  } else if (command.type == 0x5) {
+    return;
+  case 0x5:
     VXcmpVY(core, command, false);
-  } else if (command.type == 0x9) {
+    return;
+  case 0x9:
     VXcmpVY(core, command, true);
-  } else {
+    return;
+  default:
     printf("invalid skip instruction\n");
     exit(-1);
   }
@@ -261,6 +481,7 @@ void shift(cpu *core, instruction command, bool left) { // 8XY6 = R && 8XYE = L
 }
 
 void setIndexRegister(cpu *core, instruction command) { // ANNN
+  printf("command.x .y .z = %x%x%x\n\n", command.x, command.y, command.n);
   memcpy(core->indexRegister, command.nnn, 2);
 }
 
@@ -297,15 +518,15 @@ void jumpW_offset(cpu *core, instruction command) { // BXNN
 }
 
 void randNN(cpu *core, instruction command) { // CXNN
-  srand(time(0));
+  srand(time(NULL));
   int randNum = rand();
-  
+  if (randNum == 0 || randNum == '\0') {
+    randNN(core, command);
+  }
+
   unsigned char out = ((unsigned char)randNum) & command.nn;
   unsigned char *VX = getRegister((int)command.x);
   *VX = out;
-  if (out == 0 || out == '\0') {
-    randNN(core, command);
-  }
 }
 
 // returns which bit we want from right to left (0-indexed)
@@ -319,24 +540,41 @@ void draw(cpu *core, unsigned char *sprite, unsigned char n, unsigned char x,
   bool **vis = (*core).screen->visual;
   unsigned char *VF = getRegister(15);
   *VF = 0;
+  //  printf("x inside of draw = %d ~ y  =%d\n", x, y);
+  //  for (int i = 0; i < strlen( (char *) sprite); i++) {
+  //    printf("sprite + %d = %x\n", i, *(sprite + i));
+  //  }
+
   for (int i = 0; (i < n) && (x + i < numDisplayRows); i++) {
     for (int j = 0; (j < 8) && (y + j < numDisplayCols); j++) {
       if (getBit(*(sprite + i), j)) {
+        printf("updating a sprite bit\n");
         *(*(vis + x + i) + y + j) = !(*(*(vis + x + i) + y + j));
         if (!(*(*(core->screen->visual + x + i) + y + j)) && !(*VF)) {
           *VF = 1;
         }
       }
+      // printf("not updating a sprite bit\n");
     }
   }
 }
 
 void updateDisplay(cpu *core, instruction command) { // DXYN
+  printf("inside of updateDisplay \n");
   unsigned char *VX = getRegister(command.x);
   unsigned char *VY = getRegister(command.y);
   unsigned char yLen = command.n;
   unsigned char *sprite = (unsigned char *)malloc(sizeof(unsigned char) * yLen);
-  memcpy(sprite, (core->memory->RAM + ((int)*(core->indexRegister))), yLen);
+  little2bigEndian(&core->indexRegister);
+  unsigned short offset;
+  memcpy(&offset, (core->indexRegister), 2);
+  little2bigEndian(&core->indexRegister);
+
+  if (*(core->memory->RAM + (offset)) == '\0') {
+    offset = (offset % 80) + 80;
+  }
+
+  memcpy(sprite, (core->memory->RAM + (offset)), yLen);
   // y corresponds with rows, x corresponds with cols.
   draw(core, sprite, command.n, *VY, *VX);
 }

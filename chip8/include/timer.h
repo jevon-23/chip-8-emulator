@@ -22,4 +22,5 @@ delayTimer *makeDelayTimer();
 void decrementDelayTimer(delayTimer *clock);
 soundTimer *makeSoundTimer();
 void decrementSoundTimer(soundTimer *clock);
+void waitSec(time_t startTime);
 #endif

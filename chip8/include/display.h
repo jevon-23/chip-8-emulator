@@ -23,4 +23,5 @@ typedef struct display {
 // functions
 
 display *makeDisplay();
+// void buildWindow();
 #endif

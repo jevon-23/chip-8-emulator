@@ -12,8 +12,18 @@ set(SOURCES
     src/build/main.c src/utils/utils.c src/cpu/cpu.c src/memory/mem.c src/instructions/instructions.c src/stack/stack.c src/display/display.c src/timers/timer.c src/keypad/keypad.c
     )
 
+# find the sdl package
+find_package(SDL2 REQUIRED)
+include_directories(${SDL2_INCLUDE_DIRS})
+
+
 # Add an executable with the above sources
 add_executable(chip8 ${SOURCES} )
+
+add_definitions(${GCC_COVERAGE_COMPILE_FLAGS})
+
+# link the sdl library
+target_link_libraries(chip8 ${SDL2_LIBRARIES})
 
 # Set the directories that should be included in the build command for this target
 # when running g++ these will be included as -I/directory/path/
@@ -21,7 +31,10 @@ target_include_directories(chip8
     PRIVATE
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/src
+    ${SDL2_INCLUDE_DIRS}
     )
+
+
 # GoogleTest requires at least C++11
 set(CMAKE_CXX_STANDARD 11)
 
@@ -50,10 +63,15 @@ target_link_libraries(
 
 # testing display
 add_executable(testDisplay src/display/test/test.cpp src/display/display.c)
+# link the sdl library
+target_link_libraries(testDisplay ${SDL2_LIBRARIES})
+
 target_include_directories(testDisplay
     PRIVATE
     ${PROJECT_SOURCE_DIR}/include
+    ${SDL2_INCLUDE_DIRS}
     )
+
 add_test(testAll testDisplay)
 
 target_link_libraries(
@@ -132,8 +150,10 @@ add_executable(testCpu src/cpu/test/test.cpp src/cpu/cpu.c src/display/display.c
 target_include_directories(testCpu
     PRIVATE
     ${PROJECT_SOURCE_DIR}/inlcude
+    ${SDL2_INCLUDE_DIRS}
     )
 add_test(testAll testCpu)
+target_link_libraries(testCpu ${SDL2_LIBRARIES})
 
 target_link_libraries(
     testCpu

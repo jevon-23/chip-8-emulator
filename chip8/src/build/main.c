@@ -19,6 +19,7 @@ int processCLI(int argc, char **argv, char **filename) {
   strcpy(*filename, *(argv + 1));
   return 0;
 }
+
 int main(int arg, char *argv[]) {
   char *filename;
   processCLI(arg, argv, &filename);
@@ -27,8 +28,13 @@ int main(int arg, char *argv[]) {
   writeGameFile(&memory, gameFile);
   display *screen = makeDisplay();
   cpu core = makeCpu(memory, screen);
+  printf("printing out the memory real quick\n");
+  for (int i =0 ; i < ramSize; i++) {
+      printf("mem + %d = %x\n", i,  *(memory->RAM + i));
+  }
   
   printf("Successful build! Running cpu!\n");
+//   buildWindow();
   runCpu(&core);
   
   return 0;

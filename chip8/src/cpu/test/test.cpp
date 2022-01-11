@@ -33,7 +33,11 @@ TEST(clearScreenTest, clearScreen) {
   mem *m = buildMem();
   display *d = makeDisplay();
   cpu c = makeCpu(m, d);
-  clearScreen(&c);
+
+  unsigned char instruct[2] = {0x00, 0xE0};
+  instruction i = makeInstruction(instruct);
+
+  clearScreen(&c, i);
   for (int i = 0; i < numDisplayRows; i++) {
     for (int j = 0; j < numDisplayCols; j++) {
       EXPECT_EQ(false, *((*((c.screen)->visual) + i) + j));
@@ -736,5 +740,14 @@ TEST(loadTest, load) {
   
 }
 
+TEST(executeTest, execute) {
+  mem *m = buildMem();
+  display *d = makeDisplay();
+  cpu c = makeCpu(m, d);
+
+  unsigned char instruct[2] = {0x10, 0xE0};
+  instruction i = makeInstruction(instruct);
+  execute(&c, i);
+}
 
 } // namespace
